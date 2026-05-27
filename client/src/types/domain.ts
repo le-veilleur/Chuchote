@@ -14,6 +14,17 @@ export interface Room {
   members: Member[];
 }
 
+export interface ReactionView {
+  emoji: string;
+  userIds: string[];
+  count: number;
+}
+
+export interface ReplyToSummary {
+  authorName: string;
+  content: string;
+}
+
 export interface Message {
   id: string;
   roomId: string;
@@ -24,4 +35,7 @@ export interface Message {
   createdAt: string;
   editedAt?: string;
   pending?: boolean;
+  reactions: ReactionView[];
+  replyToId?: string;
+  replyToSummary?: ReplyToSummary;
 }

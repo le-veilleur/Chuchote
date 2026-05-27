@@ -17,12 +17,13 @@ import (
 const sendBufSize = 256
 
 type Client struct {
-	conn     *websocket.Conn
-	send     chan []byte
-	hub      outbound.BroadcastHub
-	messages inbound.MessageUseCase
-	rooms    inbound.RoomUseCase
-	auth     inbound.AuthUseCase
+	conn            *websocket.Conn
+	send            chan []byte
+	hub             outbound.BroadcastHub
+	messages        inbound.MessageUseCase
+	rooms           inbound.RoomUseCase
+	auth            inbound.AuthUseCase
+	subscribedRooms []model.RoomID
 }
 
 func newClient(conn *websocket.Conn, hub outbound.BroadcastHub, messages inbound.MessageUseCase, rooms inbound.RoomUseCase, auth inbound.AuthUseCase) *Client {
@@ -43,7 +44,13 @@ func (c *Client) run(ctx context.Context) {
 
 	defer func() {
 		if authenticated {
-			c.hub.Unregister(model.Connection{ID: connID, UserID: userClaims.UserID})
+			conn := model.Connection{ID: connID, UserID: userClaims.UserID}
+			// Notify all subscribed rooms that this user went offline
+			for _, roomID := range c.subscribedRooms {
+				c.hub.UnsubscribeFromRoom(conn, roomID)
+				c.broadcastRoomCount(roomID)
+			}
+			c.hub.Unregister(conn)
 		}
 		c.conn.Close(websocket.StatusNormalClosure, "")
 	}()
@@ -102,25 +109,34 @@ func (c *Client) run(ctx context.Context) {
 				c.sendError(frame.RequestID, frame.RoomID, "JOIN_FAILED", err.Error())
 				continue
 			}
-			c.hub.SubscribeToRoom(model.Connection{ID: connID, UserID: userClaims.UserID}, model.RoomID(frame.RoomID))
+			conn := model.Connection{ID: connID, UserID: userClaims.UserID}
+			c.hub.SubscribeToRoom(conn, model.RoomID(frame.RoomID))
+			c.addSubscribedRoom(model.RoomID(frame.RoomID))
 
 			history, _ := c.messages.GetRoomHistory(ctx, model.RoomID(frame.RoomID), 50)
+			onlineCount := c.hub.CountRoomSubscribers(model.RoomID(frame.RoomID))
 			c.sendJSON(map[string]any{
 				"type":      "room.joined",
 				"requestId": frame.RequestID,
 				"roomId":    frame.RoomID,
 				"payload": map[string]any{
-					"room":    roomView,
-					"history": history,
+					"room":        roomView,
+					"history":     history,
+					"onlineCount": onlineCount,
 				},
 			})
+			// Notify everyone in the room of the new count
+			c.broadcastRoomCount(model.RoomID(frame.RoomID))
 
 		case "room.leave":
 			if err := c.rooms.LeaveRoom(ctx, userClaims.UserID, model.RoomID(frame.RoomID)); err != nil {
 				c.sendError(frame.RequestID, frame.RoomID, "LEAVE_FAILED", err.Error())
 				continue
 			}
-			c.hub.UnsubscribeFromRoom(model.Connection{ID: connID, UserID: userClaims.UserID}, model.RoomID(frame.RoomID))
+			conn := model.Connection{ID: connID, UserID: userClaims.UserID}
+			c.hub.UnsubscribeFromRoom(conn, model.RoomID(frame.RoomID))
+			c.removeSubscribedRoom(model.RoomID(frame.RoomID))
+			c.broadcastRoomCount(model.RoomID(frame.RoomID))
 
 		case "message.send":
 			var p MessageSendPayload
@@ -128,13 +144,18 @@ func (c *Client) run(ctx context.Context) {
 				c.sendError(frame.RequestID, frame.RoomID, "PARSE_ERROR", "invalid payload")
 				continue
 			}
-			view, err := c.messages.SendMessage(ctx, dto.SendMessageCommand{
+			cmd := dto.SendMessageCommand{
 				RoomID:       model.RoomID(frame.RoomID),
 				AuthorID:     userClaims.UserID,
 				AuthorName:   userClaims.Username,
 				Content:      p.Content,
 				ClientTempID: p.ClientTempID,
-			})
+			}
+			if p.ReplyToID != nil {
+				msgID := model.MessageID(*p.ReplyToID)
+				cmd.ReplyToID = &msgID
+			}
+			view, err := c.messages.SendMessage(ctx, cmd)
 			if err != nil {
 				c.sendError(frame.RequestID, frame.RoomID, "SEND_FAILED", err.Error())
 				continue
@@ -144,9 +165,11 @@ func (c *Client) run(ctx context.Context) {
 				"requestId": frame.RequestID,
 				"roomId":    frame.RoomID,
 				"payload": map[string]any{
-					"messageId":    view.ID,
-					"clientTempId": view.ClientTempID,
-					"createdAt":    view.CreatedAt,
+					"messageId":      view.ID,
+					"clientTempId":   view.ClientTempID,
+					"createdAt":      view.CreatedAt,
+					"replyToId":      view.ReplyToID,
+					"replyToSummary": view.ReplyToSummary,
 				},
 			})
 
@@ -178,6 +201,21 @@ func (c *Client) run(ctx context.Context) {
 				c.sendError(frame.RequestID, frame.RoomID, "DELETE_FAILED", err.Error())
 			}
 
+		case "reaction.toggle":
+			var p ReactionTogglePayload
+			if err := json.Unmarshal(frame.Payload, &p); err != nil {
+				c.sendError(frame.RequestID, frame.RoomID, "PARSE_ERROR", "invalid payload")
+				continue
+			}
+			if _, err := c.messages.ToggleReaction(ctx, dto.ToggleReactionCommand{
+				MessageID: model.MessageID(p.MessageID),
+				UserID:    userClaims.UserID,
+				RoomID:    model.RoomID(frame.RoomID),
+				Emoji:     p.Emoji,
+			}); err != nil {
+				c.sendError(frame.RequestID, frame.RoomID, "REACTION_FAILED", err.Error())
+			}
+
 		case "typing.start", "typing.stop":
 			isTyping := frame.Type == "typing.start"
 			data, _ := json.Marshal(map[string]any{
@@ -190,7 +228,6 @@ func (c *Client) run(ctx context.Context) {
 					"isTyping": isTyping,
 				},
 			})
-			// Send to each room member except the sender
 			room, err := c.rooms.GetRoom(ctx, model.RoomID(frame.RoomID))
 			if err == nil {
 				for _, m := range room.Members {
@@ -202,6 +239,36 @@ func (c *Client) run(ctx context.Context) {
 
 		default:
 			slog.Warn("unknown ws event type", "type", frame.Type)
+		}
+	}
+}
+
+func (c *Client) broadcastRoomCount(roomID model.RoomID) {
+	count := c.hub.CountRoomSubscribers(roomID)
+	data, _ := json.Marshal(map[string]any{
+		"type":   "room.online_count",
+		"roomId": string(roomID),
+		"payload": map[string]any{
+			"count": count,
+		},
+	})
+	c.hub.BroadcastToRoom(roomID, data)
+}
+
+func (c *Client) addSubscribedRoom(roomID model.RoomID) {
+	for _, r := range c.subscribedRooms {
+		if r == roomID {
+			return
+		}
+	}
+	c.subscribedRooms = append(c.subscribedRooms, roomID)
+}
+
+func (c *Client) removeSubscribedRoom(roomID model.RoomID) {
+	for i, r := range c.subscribedRooms {
+		if r == roomID {
+			c.subscribedRooms = append(c.subscribedRooms[:i], c.subscribedRooms[i+1:]...)
+			return
 		}
 	}
 }

@@ -10,4 +10,6 @@ type BroadcastHub interface {
 	SendToUser(userID model.UserID, payload []byte)
 	SubscribeToRoom(conn model.Connection, roomID model.RoomID)
 	UnsubscribeFromRoom(conn model.Connection, roomID model.RoomID)
+	CountRoomSubscribers(roomID model.RoomID) int
+	RoomsForConn(connID model.ConnID) []model.RoomID
 }

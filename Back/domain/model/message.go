@@ -16,9 +16,10 @@ type Message struct {
 	ClientTempID string
 	CreatedAt    time.Time
 	EditedAt     *time.Time
+	ReplyToID    *MessageID
 }
 
-func NewMessage(id MessageID, roomID RoomID, authorID UserID, content, clientTempID string) (Message, error) {
+func NewMessage(id MessageID, roomID RoomID, authorID UserID, content, clientTempID string, replyToID *MessageID) (Message, error) {
 	if content == "" {
 		return Message{}, domainerrors.ErrInvalidInput
 	}
@@ -32,5 +33,6 @@ func NewMessage(id MessageID, roomID RoomID, authorID UserID, content, clientTem
 		Content:      content,
 		ClientTempID: clientTempID,
 		CreatedAt:    time.Now().UTC(),
+		ReplyToID:    replyToID,
 	}, nil
 }

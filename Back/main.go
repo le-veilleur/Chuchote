@@ -21,12 +21,13 @@ func main() {
 	userRepo := memory.NewUserRepo()
 	roomRepo := memory.NewRoomRepo()
 	messageRepo := memory.NewMessageRepo()
+	reactionRepo := memory.NewReactionRepo()
 	broadcastHub := hub.NewHub()
 
 	// Application services
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
 	roomSvc := service.NewRoomService(roomRepo, userRepo)
-	messageSvc := service.NewMessageService(messageRepo, broadcastHub, userRepo)
+	messageSvc := service.NewMessageService(messageRepo, reactionRepo, broadcastHub, userRepo)
 
 	// Inbound adapters
 	authHandler := httpadapter.NewAuthHandler(authSvc)

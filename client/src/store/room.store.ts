@@ -5,10 +5,12 @@ import type { Room } from '../types/domain';
 interface RoomState {
   rooms: Room[];
   activeRoomId: string | null;
+  onlineByRoom: Record<string, number>;
   setRooms: (rooms: Room[]) => void;
   addRoom: (room: Room) => void;
   updateRoom: (room: Room) => void;
   setActiveRoom: (roomId: string | null) => void;
+  setOnlineCount: (roomId: string, count: number) => void;
 }
 
 export const useRoomStore = create<RoomState>()(
@@ -16,6 +18,7 @@ export const useRoomStore = create<RoomState>()(
     (set) => ({
       rooms: [],
       activeRoomId: null,
+      onlineByRoom: {},
       setRooms: (newRooms) => set((s) => ({
         // Merge: keep member data from WS (updateRoom) if already populated,
         // because HTTP response can arrive after room.joined and would wipe it.
@@ -28,6 +31,8 @@ export const useRoomStore = create<RoomState>()(
       updateRoom: (room) =>
         set((s) => ({ rooms: s.rooms.map((r) => (r.id === room.id ? room : r)) })),
       setActiveRoom: (roomId) => set({ activeRoomId: roomId }),
+      setOnlineCount: (roomId, count) =>
+        set((s) => ({ onlineByRoom: { ...s.onlineByRoom, [roomId]: count } })),
     }),
     {
       name: 'chuchote-room',

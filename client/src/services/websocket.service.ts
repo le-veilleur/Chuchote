@@ -19,7 +19,6 @@ class WebSocketService {
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
-      // Always re-send auth on every new connection (handles page reload + reconnects)
       const { token } = useAuthStore.getState();
       if (token) {
         this.ws!.send(JSON.stringify({
@@ -29,7 +28,6 @@ class WebSocketService {
           payload: { token },
         }));
       }
-      // Flush queued messages
       const pending = this.queue.splice(0);
       for (const event of pending) {
         this.ws!.send(JSON.stringify(event));
@@ -62,7 +60,6 @@ class WebSocketService {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(event));
     } else {
-      // Queue until the connection is open
       this.queue.push(event);
     }
   }
@@ -85,7 +82,6 @@ class WebSocketService {
 
     switch (event.type) {
       case 'auth.connected': {
-        // Auto-rejoin the active room after every (re)connect
         const activeRoomId = useRoomStore.getState().activeRoomId;
         if (activeRoomId) {
           this.send({ type: 'room.join', requestId: crypto.randomUUID(), roomId: activeRoomId, payload: {} });
@@ -96,6 +92,15 @@ class WebSocketService {
       case 'room.joined':
         chat.setHistory(event.roomId!, event.payload.history);
         rooms.updateRoom(event.payload.room);
+        if (event.roomId) {
+          rooms.setOnlineCount(event.roomId, event.payload.onlineCount);
+        }
+        break;
+
+      case 'room.online_count':
+        if (event.roomId) {
+          rooms.setOnlineCount(event.roomId, event.payload.count);
+        }
         break;
 
       case 'message.new': {
@@ -105,9 +110,8 @@ class WebSocketService {
       }
 
       case 'message.ack': {
-        const { clientTempId, messageId, createdAt } = event.payload;
+        const { clientTempId, messageId, createdAt, replyToId, replyToSummary } = event.payload;
         if (event.roomId) {
-          // Merge server id/createdAt into the existing optimistic message
           const existing = chat.messagesByRoom[event.roomId]?.find(
             (m) => m.clientTempId === clientTempId
           );
@@ -117,6 +121,8 @@ class WebSocketService {
               id: messageId,
               createdAt,
               pending: false,
+              replyToId,
+              replyToSummary,
             });
           }
         }
@@ -138,6 +144,12 @@ class WebSocketService {
       case 'typing.indicator':
         if (event.roomId) {
           chat.setTyping(event.roomId, { userId: event.payload.userId, username: event.payload.username }, event.payload.isTyping);
+        }
+        break;
+
+      case 'reaction.updated':
+        if (event.roomId) {
+          chat.setReactions(event.roomId, event.payload.messageId, event.payload.reactions);
         }
         break;
     }

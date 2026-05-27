@@ -17,8 +17,9 @@ type RoomJoinPayload struct{}
 type RoomLeavePayload struct{}
 
 type MessageSendPayload struct {
-	Content      string `json:"content"`
-	ClientTempID string `json:"clientTempId"`
+	Content      string  `json:"content"`
+	ClientTempID string  `json:"clientTempId"`
+	ReplyToID    *string `json:"replyToId,omitempty"`
 }
 
 type MessageEditPayload struct {
@@ -28,6 +29,11 @@ type MessageEditPayload struct {
 
 type MessageDeletePayload struct {
 	MessageID string `json:"messageId"`
+}
+
+type ReactionTogglePayload struct {
+	MessageID string `json:"messageId"`
+	Emoji     string `json:"emoji"`
 }
 
 type TypingPayload struct{}

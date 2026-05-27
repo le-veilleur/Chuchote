@@ -112,3 +112,21 @@ func (h *Hub) SendToUser(userID model.UserID, payload []byte) {
 		}
 	}
 }
+
+func (h *Hub) CountRoomSubscribers(roomID model.RoomID) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.roomMembers[roomID])
+}
+
+func (h *Hub) RoomsForConn(connID model.ConnID) []model.RoomID {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	var rooms []model.RoomID
+	for roomID, members := range h.roomMembers {
+		if _, ok := members[connID]; ok {
+			rooms = append(rooms, roomID)
+		}
+	}
+	return rooms
+}

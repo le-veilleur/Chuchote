@@ -10,7 +10,7 @@ export function useMessages(roomId: string) {
   const addMessage = useChatStore((s) => s.addMessage);
   const { userId, username } = useAuthStore();
 
-  const send = (content: string) => {
+  const send = (content: string, replyToId?: string) => {
     if (!content.trim() || !userId || !username) return;
     const clientTempId = crypto.randomUUID();
 
@@ -23,6 +23,8 @@ export function useMessages(roomId: string) {
       clientTempId,
       createdAt: new Date().toISOString(),
       pending: true,
+      reactions: [],
+      replyToId,
     };
     addMessage(roomId, optimistic);
 
@@ -30,7 +32,7 @@ export function useMessages(roomId: string) {
       type: 'message.send',
       requestId: crypto.randomUUID(),
       roomId,
-      payload: { content, clientTempId },
+      payload: { content, clientTempId, replyToId },
     });
   };
 
@@ -53,5 +55,14 @@ export function useMessages(roomId: string) {
     });
   };
 
-  return { messages, send, edit, remove };
+  const toggleReaction = (messageId: string, emoji: string) => {
+    wsService.send({
+      type: 'reaction.toggle',
+      requestId: crypto.randomUUID(),
+      roomId,
+      payload: { messageId, emoji },
+    });
+  };
+
+  return { messages, send, edit, remove, toggleReaction };
 }

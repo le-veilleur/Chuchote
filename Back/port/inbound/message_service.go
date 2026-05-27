@@ -12,4 +12,5 @@ type MessageUseCase interface {
 	GetRoomHistory(ctx context.Context, roomID model.RoomID, limit int) ([]dto.MessageView, error)
 	EditMessage(ctx context.Context, cmd dto.EditMessageCommand) (dto.MessageView, error)
 	DeleteMessage(ctx context.Context, cmd dto.DeleteMessageCommand) error
+	ToggleReaction(ctx context.Context, cmd dto.ToggleReactionCommand) ([]dto.ReactionView, error)
 }

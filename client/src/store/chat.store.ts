@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Message } from '../types/domain';
+import type { Message, ReactionView } from '../types/domain';
 
 interface TypingUser {
   userId: string;
@@ -15,6 +15,7 @@ interface ChatState {
   setTyping: (roomId: string, user: TypingUser, isTyping: boolean) => void;
   editMessage: (roomId: string, messageId: string, content: string, editedAt: string) => void;
   deleteMessage: (roomId: string, messageId: string) => void;
+  setReactions: (roomId: string, messageId: string, reactions: ReactionView[]) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -71,6 +72,16 @@ export const useChatStore = create<ChatState>((set) => ({
       messagesByRoom: {
         ...s.messagesByRoom,
         [roomId]: (s.messagesByRoom[roomId] ?? []).filter((m) => m.id !== messageId),
+      },
+    })),
+
+  setReactions: (roomId, messageId, reactions) =>
+    set((s) => ({
+      messagesByRoom: {
+        ...s.messagesByRoom,
+        [roomId]: (s.messagesByRoom[roomId] ?? []).map((m) =>
+          m.id === messageId ? { ...m, reactions } : m
+        ),
       },
     })),
 }));
