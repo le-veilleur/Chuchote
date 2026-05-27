@@ -1,6 +1,7 @@
 import type { InboundWSEvent, OutboundWSEvent } from '../types/ws-events';
 import { useChatStore } from '../store/chat.store';
 import { useRoomStore } from '../store/room.store';
+import { useAuthStore } from '../store/auth.store';
 
 type EventHandler<T extends InboundWSEvent> = (event: T) => void;
 type AnyHandler = EventHandler<InboundWSEvent>;
@@ -18,7 +19,17 @@ class WebSocketService {
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
-      // Flush queued messages (e.g. auth.connect sent before the socket was ready)
+      // Always re-send auth on every new connection (handles page reload + reconnects)
+      const { token } = useAuthStore.getState();
+      if (token) {
+        this.ws!.send(JSON.stringify({
+          type: 'auth.connect',
+          requestId: crypto.randomUUID(),
+          roomId: null,
+          payload: { token },
+        }));
+      }
+      // Flush queued messages
       const pending = this.queue.splice(0);
       for (const event of pending) {
         this.ws!.send(JSON.stringify(event));
@@ -73,6 +84,15 @@ class WebSocketService {
     const rooms = useRoomStore.getState();
 
     switch (event.type) {
+      case 'auth.connected': {
+        // Auto-rejoin the active room after every (re)connect
+        const activeRoomId = useRoomStore.getState().activeRoomId;
+        if (activeRoomId) {
+          this.send({ type: 'room.join', requestId: crypto.randomUUID(), roomId: activeRoomId, payload: {} });
+        }
+        break;
+      }
+
       case 'room.joined':
         chat.setHistory(event.roomId!, event.payload.history);
         rooms.updateRoom(event.payload.room);

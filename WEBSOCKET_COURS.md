@@ -1042,4 +1042,60 @@ Latence = intervalle de polling    Latence = RTT réseau seulement
 
 ---
 
+---
+
+## 13. Le "vrai" temps réel — latence zéro ou perception humaine ?
+
+### La question
+
+Peut-on parler de temps réel si les messages ne sont pas instantanés ?
+
+**Oui.** Le temps réel n'a jamais signifié latence zéro — il n'existe pas en informatique (même la lumière met du temps). Le temps réel, c'est **une latence suffisamment basse pour que l'interaction semble fluide à l'humain**.
+
+### Perception humaine
+
+| Latence | Ressenti |
+|---|---|
+| < 100 ms | Perçu comme instantané |
+| 100 – 300 ms | Léger délai perceptible, toujours acceptable |
+| 300 ms – 1 s | Délai notable, mais tolérable pour une conversation |
+| > 1 s | Frustrant, impression de "lag" |
+
+Chuchote en local : ~1-5 ms. Sur internet : 50-200 ms selon la distance au serveur. Les deux sont du "temps réel" pour l'utilisateur.
+
+### Deux types de temps réel en informatique
+
+| Type | Définition | Exemples |
+|---|---|---|
+| **Hard real-time** | La réponse **doit** arriver avant une deadline absolue — sinon c'est une défaillance critique | Avionique, ABS, pacemaker, contrôle industriel |
+| **Soft real-time** | La réponse doit arriver **rapidement**, un dépassement dégrade l'expérience mais n'est pas catastrophique | Chat, jeux vidéo, streaming vidéo, bourse |
+
+Une app de messagerie est du **soft real-time**. 300 ms, c'est acceptable. Pour un pacemaker, non.
+
+### Ce qui définit le temps réel, c'est le modèle de communication
+
+Ce n'est pas la latence absolue — c'est le fait que le serveur **pousse** dès qu'il a quelque chose :
+
+```
+Polling HTTP (pas du temps réel)     WebSocket (temps réel)
+
+Client : "y'a du nouveau ?"          Serveur : "voilà un message"
+Serveur : "non"                        → push immédiat, sans que le
+Client : "y'a du nouveau ?"              client ait demandé
+Serveur : "non"
+Client : "y'a du nouveau ?"          La latence = RTT réseau uniquement
+Serveur : "oui, voilà"               Pas d'attente du prochain poll
+```
+
+**Avec le polling**, même un intervalle de 500 ms crée une latence artificielle de 0-500 ms en plus du réseau. Ce n'est pas du temps réel — c'est du quasi-temps-réel.
+
+**Avec WebSocket**, le message arrive dès que le serveur le traite. La latence = uniquement le temps réseau + traitement serveur. C'est du temps réel.
+
+### Résumé
+
+> Le temps réel = modèle **push** + latence **perçue comme immédiate** par l'humain.
+> L'instantanéité absolue n'existe pas. Ce qui compte, c'est de ne pas faire attendre l'utilisateur inutilement.
+
+---
+
 *Document généré à partir du code source du projet Chuchote — `Back/` (Go) et `client/src/` (React TypeScript)*
