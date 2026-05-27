@@ -61,12 +61,19 @@ func (s *MessageService) GetRoomHistory(ctx context.Context, roomID model.RoomID
 
 	views := make([]dto.MessageView, 0, len(msgs))
 	for _, m := range msgs {
+		authorName := ""
+		if u, err := s.users.FindByID(ctx, m.AuthorID); err == nil {
+			authorName = u.Username
+		}
 		views = append(views, dto.MessageView{
-			ID:        m.ID,
-			RoomID:    m.RoomID,
-			AuthorID:  m.AuthorID,
-			Content:   m.Content,
-			CreatedAt: m.CreatedAt,
+			ID:         m.ID,
+			RoomID:     m.RoomID,
+			AuthorID:   m.AuthorID,
+			AuthorName: authorName,
+			Content:    m.Content,
+			ClientTempID: m.ClientTempID,
+			CreatedAt:  m.CreatedAt,
+			EditedAt:   m.EditedAt,
 		})
 	}
 	return views, nil

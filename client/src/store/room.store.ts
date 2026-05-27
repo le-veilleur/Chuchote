@@ -16,7 +16,14 @@ export const useRoomStore = create<RoomState>()(
     (set) => ({
       rooms: [],
       activeRoomId: null,
-      setRooms: (rooms) => set({ rooms }),
+      setRooms: (newRooms) => set((s) => ({
+        // Merge: keep member data from WS (updateRoom) if already populated,
+        // because HTTP response can arrive after room.joined and would wipe it.
+        rooms: newRooms.map((r) => {
+          const existing = s.rooms.find((e) => e.id === r.id);
+          return existing && existing.members.length > 0 ? { ...r, members: existing.members } : r;
+        }),
+      })),
       addRoom: (room) => set((s) => ({ rooms: [...s.rooms, room] })),
       updateRoom: (room) =>
         set((s) => ({ rooms: s.rooms.map((r) => (r.id === room.id ? room : r)) })),
