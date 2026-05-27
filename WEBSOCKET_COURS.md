@@ -229,6 +229,13 @@ Une fois la connexion établie, les données circulent sous forme de **frames** 
 
 ### Anatomie d'une frame
 
+> **Comment lire ce diagramme ?**
+> Le sens de lecture est **horizontal, de gauche à droite**, bit par bit.
+> - La **ligne du haut** (0 · 1 · 2 · 3) = numéro de l'**octet**
+> - La **ligne en dessous** (0 1 2 3 4 5 6 7 | 0 1 2 3…) = numéro du **bit** dans l'octet
+> - Chaque colonne représente **1 bit**
+> - Si un nom de champ est écrit **verticalement** (ex: F/I/N sur 3 lignes), c'est uniquement parce que le mot ne tient pas en largeur dans 1 seul bit — ça reste **un seul champ d'1 bit**
+
 ```
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -245,6 +252,21 @@ Une fois la connexion établie, les données circulent sous forme de **frames** 
 |                    Payload Data                                |
 +---------------------------------------------------------------+
 ```
+
+**Légende des champs :**
+
+| Champ | Taille | Rôle |
+|---|---|---|
+| **FIN** | 1 bit | `1` = c'est la dernière (ou seule) frame du message. `0` = il y a d'autres fragments qui suivent. |
+| **RSV1/2/3** | 1 bit chacun | Réservés pour des extensions futures (compression, etc.). Toujours `0` dans un WS basique. |
+| **opcode** | 4 bits | Type de la frame : `0x1` = texte, `0x2` = binaire, `0x8` = fermeture, `0x9` = ping, `0xA` = pong. |
+| **MASK** | 1 bit | `1` = le payload est masqué. **Toujours `1` côté client → serveur** (obligatoire RFC 6455). `0` côté serveur → client. |
+| **Payload len** | 7 bits | Longueur du payload. Si `< 126` : c'est la vraie longueur. Si `= 126` : lire 2 octets de plus. Si `= 127` : lire 8 octets de plus. |
+| **Extended payload length** | 16 ou 64 bits | Présent uniquement si `Payload len == 126` (16 bits) ou `== 127` (64 bits). Donne la vraie longueur pour les grands messages. |
+| **Masking-key** | 32 bits (4 octets) | Clé aléatoire utilisée pour masquer le payload. Présente uniquement si `MASK == 1`. |
+| **Payload Data** | variable | Le contenu réel du message, XOR-é avec la masking-key octet par octet si `MASK == 1`. |
+
+> **Pourquoi masquer côté client ?** Pour empêcher les proxies et caches HTTP intermédiaires de mal interpréter les données WebSocket comme du HTTP. C'est une protection réseau, pas une protection contre l'espionnage.
 
 En pratique, pour un message texte court (< 126 octets) :
 

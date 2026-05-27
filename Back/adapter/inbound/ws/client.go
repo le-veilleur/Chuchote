@@ -150,6 +150,34 @@ func (c *Client) run(ctx context.Context) {
 				},
 			})
 
+		case "message.edit":
+			var p MessageEditPayload
+			if err := json.Unmarshal(frame.Payload, &p); err != nil {
+				c.sendError(frame.RequestID, frame.RoomID, "PARSE_ERROR", "invalid payload")
+				continue
+			}
+			_, err := c.messages.EditMessage(ctx, dto.EditMessageCommand{
+				MessageID:   model.MessageID(p.MessageID),
+				RequestorID: userClaims.UserID,
+				Content:     p.Content,
+			})
+			if err != nil {
+				c.sendError(frame.RequestID, frame.RoomID, "EDIT_FAILED", err.Error())
+			}
+
+		case "message.delete":
+			var p MessageDeletePayload
+			if err := json.Unmarshal(frame.Payload, &p); err != nil {
+				c.sendError(frame.RequestID, frame.RoomID, "PARSE_ERROR", "invalid payload")
+				continue
+			}
+			if err := c.messages.DeleteMessage(ctx, dto.DeleteMessageCommand{
+				MessageID:   model.MessageID(p.MessageID),
+				RequestorID: userClaims.UserID,
+			}); err != nil {
+				c.sendError(frame.RequestID, frame.RoomID, "DELETE_FAILED", err.Error())
+			}
+
 		case "typing.start", "typing.stop":
 			isTyping := frame.Type == "typing.start"
 			data, _ := json.Marshal(map[string]any{

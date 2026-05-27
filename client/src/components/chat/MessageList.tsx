@@ -3,6 +3,7 @@ import { MessageBubble } from './MessageBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { useChatStore } from '../../store/chat.store';
 import { useAuthStore } from '../../store/auth.store';
+import { useMessages } from '../../hooks/useMessages';
 import type { Message } from '../../types/domain';
 
 const EMPTY_MESSAGES: Message[] = [];
@@ -17,6 +18,7 @@ export function MessageList({ roomId }: Props) {
   const allTyping = useChatStore((s) => s.typingByRoom[roomId] ?? EMPTY_TYPING);
   const myId = useAuthStore((s) => s.userId);
   const typingUsers = allTyping.filter((u) => u.userId !== myId);
+  const { edit, remove } = useMessages(roomId);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,7 +35,12 @@ export function MessageList({ roomId }: Props) {
       padding: '16px',
     }}>
       {messages.map((m) => (
-        <MessageBubble key={m.clientTempId ?? m.id} message={m} />
+        <MessageBubble
+          key={m.clientTempId ?? m.id}
+          message={m}
+          onEdit={edit}
+          onDelete={remove}
+        />
       ))}
       <TypingIndicator usernames={typingUsers.map((u) => u.username)} />
       <div ref={bottomRef} />

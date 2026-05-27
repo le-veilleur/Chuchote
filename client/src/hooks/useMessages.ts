@@ -34,5 +34,24 @@ export function useMessages(roomId: string) {
     });
   };
 
-  return { messages, send };
+  const edit = (messageId: string, content: string) => {
+    if (!content.trim()) return;
+    wsService.send({
+      type: 'message.edit',
+      requestId: crypto.randomUUID(),
+      roomId,
+      payload: { messageId, content },
+    });
+  };
+
+  const remove = (messageId: string) => {
+    wsService.send({
+      type: 'message.delete',
+      requestId: crypto.randomUUID(),
+      roomId,
+      payload: { messageId },
+    });
+  };
+
+  return { messages, send, edit, remove };
 }

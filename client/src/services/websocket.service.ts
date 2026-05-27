@@ -103,6 +103,18 @@ class WebSocketService {
         break;
       }
 
+      case 'message.edited':
+        if (event.roomId) {
+          chat.editMessage(event.roomId, event.payload.messageId, event.payload.content, event.payload.editedAt);
+        }
+        break;
+
+      case 'message.deleted':
+        if (event.roomId) {
+          chat.deleteMessage(event.roomId, event.payload.messageId);
+        }
+        break;
+
       case 'typing.indicator':
         if (event.roomId) {
           chat.setTyping(event.roomId, { userId: event.payload.userId, username: event.payload.username }, event.payload.isTyping);

@@ -10,4 +10,6 @@ import (
 type MessageUseCase interface {
 	SendMessage(ctx context.Context, cmd dto.SendMessageCommand) (dto.MessageView, error)
 	GetRoomHistory(ctx context.Context, roomID model.RoomID, limit int) ([]dto.MessageView, error)
+	EditMessage(ctx context.Context, cmd dto.EditMessageCommand) (dto.MessageView, error)
+	DeleteMessage(ctx context.Context, cmd dto.DeleteMessageCommand) error
 }

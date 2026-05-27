@@ -22,5 +22,6 @@ export interface Message {
   content: string;
   clientTempId?: string;
   createdAt: string;
+  editedAt?: string;
   pending?: boolean;
 }

@@ -14,6 +14,17 @@ type SendMessageCommand struct {
 	ClientTempID string
 }
 
+type EditMessageCommand struct {
+	MessageID model.MessageID
+	RequestorID model.UserID
+	Content   string
+}
+
+type DeleteMessageCommand struct {
+	MessageID   model.MessageID
+	RequestorID model.UserID
+}
+
 type MessageView struct {
 	ID           model.MessageID `json:"id"`
 	RoomID       model.RoomID    `json:"roomId"`
@@ -22,4 +33,5 @@ type MessageView struct {
 	Content      string          `json:"content"`
 	ClientTempID string          `json:"clientTempId"`
 	CreatedAt    time.Time       `json:"createdAt"`
+	EditedAt     *time.Time      `json:"editedAt,omitempty"`
 }

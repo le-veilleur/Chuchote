@@ -15,11 +15,16 @@ export type MessageSendEvent = WSFrame<'message.send', { content: string; client
 export type TypingStartEvent = WSFrame<'typing.start', Record<string, never>>;
 export type TypingStopEvent = WSFrame<'typing.stop', Record<string, never>>;
 
+export type MessageEditEvent = WSFrame<'message.edit', { messageId: string; content: string }>;
+export type MessageDeleteEvent = WSFrame<'message.delete', { messageId: string }>;
+
 export type OutboundWSEvent =
   | AuthConnectEvent
   | RoomJoinEvent
   | RoomLeaveEvent
   | MessageSendEvent
+  | MessageEditEvent
+  | MessageDeleteEvent
   | TypingStartEvent
   | TypingStopEvent;
 
@@ -33,12 +38,17 @@ export type TypingIndicatorEvent = WSFrame<'typing.indicator', { userId: string;
 export type UserPresenceEvent = WSFrame<'user.presence', { userId: string; username: string; status: 'online' | 'offline' }>;
 export type ErrorEvent = WSFrame<'error', { code: string; message: string }>;
 
+export type MessageEditedEvent = WSFrame<'message.edited', { messageId: string; content: string; editedAt: string }>;
+export type MessageDeletedEvent = WSFrame<'message.deleted', { messageId: string }>;
+
 export type InboundWSEvent =
   | AuthConnectedEvent
   | AuthErrorEvent
   | RoomJoinedEvent
   | MessageNewEvent
   | MessageAckEvent
+  | MessageEditedEvent
+  | MessageDeletedEvent
   | TypingIndicatorEvent
   | UserPresenceEvent
   | ErrorEvent;

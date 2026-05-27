@@ -21,6 +21,15 @@ type MessageSendPayload struct {
 	ClientTempID string `json:"clientTempId"`
 }
 
+type MessageEditPayload struct {
+	MessageID string `json:"messageId"`
+	Content   string `json:"content"`
+}
+
+type MessageDeletePayload struct {
+	MessageID string `json:"messageId"`
+}
+
 type TypingPayload struct{}
 
 func parseFrame(data []byte) (WSFrame, error) {

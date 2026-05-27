@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
+	domainerrors "github.com/maxime/chuchote/domain/errors"
 	"github.com/maxime/chuchote/application/dto"
 	"github.com/maxime/chuchote/domain/model"
 	"github.com/maxime/chuchote/port/outbound"
@@ -68,6 +70,77 @@ func (s *MessageService) GetRoomHistory(ctx context.Context, roomID model.RoomID
 		})
 	}
 	return views, nil
+}
+
+func (s *MessageService) EditMessage(ctx context.Context, cmd dto.EditMessageCommand) (dto.MessageView, error) {
+	if cmd.Content == "" || len(cmd.Content) > 4000 {
+		return dto.MessageView{}, domainerrors.ErrInvalidInput
+	}
+
+	msg, err := s.messages.FindByID(ctx, cmd.MessageID)
+	if err != nil {
+		return dto.MessageView{}, err
+	}
+	if msg.AuthorID != cmd.RequestorID {
+		return dto.MessageView{}, domainerrors.ErrUnauthorized
+	}
+
+	now := time.Now().UTC()
+	msg.Content = cmd.Content
+	msg.EditedAt = &now
+
+	if err := s.messages.Update(ctx, msg); err != nil {
+		return dto.MessageView{}, err
+	}
+
+	user, _ := s.users.FindByID(ctx, msg.AuthorID)
+	view := dto.MessageView{
+		ID:        msg.ID,
+		RoomID:    msg.RoomID,
+		AuthorID:  msg.AuthorID,
+		AuthorName: user.Username,
+		Content:   msg.Content,
+		CreatedAt: msg.CreatedAt,
+		EditedAt:  msg.EditedAt,
+	}
+
+	data, _ := json.Marshal(map[string]any{
+		"type":   "message.edited",
+		"roomId": string(msg.RoomID),
+		"payload": map[string]any{
+			"messageId": msg.ID,
+			"content":   msg.Content,
+			"editedAt":  msg.EditedAt,
+		},
+	})
+	s.hub.BroadcastToRoom(msg.RoomID, data)
+
+	return view, nil
+}
+
+func (s *MessageService) DeleteMessage(ctx context.Context, cmd dto.DeleteMessageCommand) error {
+	msg, err := s.messages.FindByID(ctx, cmd.MessageID)
+	if err != nil {
+		return err
+	}
+	if msg.AuthorID != cmd.RequestorID {
+		return domainerrors.ErrUnauthorized
+	}
+
+	if err := s.messages.Delete(ctx, cmd.MessageID); err != nil {
+		return err
+	}
+
+	data, _ := json.Marshal(map[string]any{
+		"type":   "message.deleted",
+		"roomId": string(msg.RoomID),
+		"payload": map[string]any{
+			"messageId": msg.ID,
+		},
+	})
+	s.hub.BroadcastToRoom(msg.RoomID, data)
+
+	return nil
 }
 
 type broadcastMessageNew struct {
