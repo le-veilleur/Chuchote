@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { Pencil, Trash2, Check, X } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import type { Message } from '../../types/domain';
 import { useAuthStore } from '../../store/auth.store';
@@ -77,8 +78,12 @@ export function MessageBubble({ message, onEdit, onDelete }: Props) {
             zIndex: 10,
             whiteSpace: 'nowrap',
           }}>
-            <button onClick={startEdit} style={actionBtnStyle} title="Modifier">✏️</button>
-            <button onClick={() => onDelete(message.id)} style={{ ...actionBtnStyle, color: '#e74c3c' }} title="Supprimer">🗑️</button>
+            <ActionIconButton onClick={startEdit} title="Modifier">
+              <Pencil size={13} />
+            </ActionIconButton>
+            <ActionIconButton onClick={() => onDelete(message.id)} title="Supprimer" danger>
+              <Trash2 size={13} />
+            </ActionIconButton>
           </div>
         )}
 
@@ -119,8 +124,14 @@ export function MessageBubble({ message, onEdit, onDelete }: Props) {
                 }}
               />
               <div style={{ display: 'flex', gap: 6, marginTop: 4, fontSize: 11 }}>
-                <button onClick={submitEdit} style={saveStyle}>Sauvegarder</button>
-                <button onClick={cancelEdit} style={cancelStyle}>Annuler</button>
+                <button onClick={submitEdit} style={saveStyle}>
+                  <Check size={11} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3 }} />
+                  Sauvegarder
+                </button>
+                <button onClick={cancelEdit} style={cancelStyle}>
+                  <X size={11} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3 }} />
+                  Annuler
+                </button>
               </div>
               <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>Entrée pour sauvegarder · Échap pour annuler</div>
             </div>
@@ -138,14 +149,35 @@ export function MessageBubble({ message, onEdit, onDelete }: Props) {
   );
 }
 
-const actionBtnStyle: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  fontSize: 13,
-  padding: '0 2px',
-  lineHeight: 1,
-};
+function ActionIconButton({ onClick, title, danger, children }: {
+  onClick: () => void;
+  title: string;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title={title}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 24, height: 24,
+        background: hovered ? (danger ? 'rgba(231,76,60,0.15)' : 'rgba(255,255,255,0.1)') : 'none',
+        border: 'none',
+        borderRadius: 4,
+        cursor: 'pointer',
+        color: hovered && danger ? '#e74c3c' : 'var(--color-text-muted)',
+        transition: 'background 0.1s, color 0.1s',
+        padding: 0,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 const saveStyle: React.CSSProperties = {
   background: 'rgba(255,255,255,0.25)',

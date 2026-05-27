@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { SendHorizonal } from 'lucide-react';
 import { useMessages } from '../../hooks/useMessages';
 import { useTypingIndicator } from '../../hooks/useTypingIndicator';
 
@@ -8,6 +9,7 @@ interface Props {
 
 export function MessageInput({ roomId }: Props) {
   const [value, setValue] = useState('');
+  const [hovered, setHovered] = useState(false);
   const { send } = useMessages(roomId);
   const { onKeystroke } = useTypingIndicator(roomId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -19,6 +21,8 @@ export function MessageInput({ roomId }: Props) {
     setValue('');
     textareaRef.current?.focus();
   };
+
+  const active = !!value.trim();
 
   return (
     <div style={{
@@ -55,19 +59,25 @@ export function MessageInput({ roomId }: Props) {
       />
       <button
         onClick={handleSubmit}
-        disabled={!value.trim()}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        disabled={!active}
+        title="Envoyer"
         style={{
+          display: 'flex', alignItems: 'center', gap: 6,
           padding: '8px 16px',
           borderRadius: 8,
           border: 'none',
-          background: 'var(--color-accent)',
+          background: active && hovered ? 'var(--color-accent-hover, #7c3aed)' : 'var(--color-accent)',
           color: '#fff',
-          cursor: 'pointer',
+          cursor: active ? 'pointer' : 'not-allowed',
           fontWeight: 600,
           fontSize: 14,
-          opacity: value.trim() ? 1 : 0.4,
+          opacity: active ? 1 : 0.4,
+          transition: 'background 0.15s, opacity 0.15s',
         }}
       >
+        <SendHorizonal size={16} />
         Envoyer
       </button>
     </div>

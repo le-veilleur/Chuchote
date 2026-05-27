@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Plus, LogOut } from 'lucide-react';
 import { useRooms } from '../../hooks/useRooms';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -6,6 +7,8 @@ export function Sidebar() {
   const { rooms, activeRoomId, joinRoom, createRoom } = useRooms();
   const { username, logout } = useAuth();
   const [newRoomName, setNewRoomName] = useState('');
+  const [addHovered, setAddHovered] = useState(false);
+  const [logoutHovered, setLogoutHovered] = useState(false);
 
   const handleCreate = async () => {
     const name = newRoomName.trim();
@@ -33,23 +36,12 @@ export function Sidebar() {
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {rooms.map((room) => (
-          <button
+          <RoomButton
             key={room.id}
+            name={room.name}
+            active={activeRoomId === room.id}
             onClick={() => joinRoom(room.id)}
-            style={{
-              width: '100%',
-              textAlign: 'left',
-              padding: '8px 16px',
-              border: 'none',
-              background: activeRoomId === room.id ? 'var(--color-accent)' : 'transparent',
-              color: activeRoomId === room.id ? '#fff' : 'var(--color-text)',
-              cursor: 'pointer',
-              fontSize: 14,
-              borderRadius: 0,
-            }}
-          >
-            #{room.name}
-          </button>
+          />
         ))}
       </div>
 
@@ -67,11 +59,19 @@ export function Sidebar() {
         />
         <button
           onClick={handleCreate}
+          onMouseEnter={() => setAddHovered(true)}
+          onMouseLeave={() => setAddHovered(false)}
+          title="Créer la room"
           style={{
-            padding: '6px 10px', borderRadius: 6, border: 'none',
-            background: 'var(--color-accent)', color: '#fff', cursor: 'pointer', fontSize: 13,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 32, height: 32, borderRadius: 6, border: 'none',
+            background: addHovered ? 'var(--color-accent-hover, #7c3aed)' : 'var(--color-accent)',
+            color: '#fff', cursor: 'pointer',
+            transition: 'background 0.15s',
           }}
-        >+</button>
+        >
+          <Plus size={16} strokeWidth={2.5} />
+        </button>
       </div>
 
       <div style={{
@@ -85,11 +85,50 @@ export function Sidebar() {
         <span style={{ fontWeight: 600 }}>{username}</span>
         <button
           onClick={logout}
-          style={{ fontSize: 12, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}
+          onMouseEnter={() => setLogoutHovered(true)}
+          onMouseLeave={() => setLogoutHovered(false)}
+          title="Déconnexion"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            fontSize: 12, border: 'none', borderRadius: 4,
+            background: logoutHovered ? 'rgba(255,255,255,0.08)' : 'none',
+            cursor: 'pointer',
+            color: logoutHovered ? 'var(--color-text)' : 'var(--color-text-muted)',
+            padding: '4px 6px',
+            transition: 'background 0.15s, color 0.15s',
+          }}
         >
+          <LogOut size={13} />
           Déconnexion
         </button>
       </div>
     </div>
+  );
+}
+
+function RoomButton({ name, active, onClick }: { name: string; active: boolean; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: '100%',
+        textAlign: 'left',
+        padding: '8px 16px',
+        border: 'none',
+        background: active
+          ? 'var(--color-accent)'
+          : hovered ? 'rgba(255,255,255,0.06)' : 'transparent',
+        color: active ? '#fff' : 'var(--color-text)',
+        cursor: 'pointer',
+        fontSize: 14,
+        borderRadius: 0,
+        transition: 'background 0.1s',
+      }}
+    >
+      #{name}
+    </button>
   );
 }
