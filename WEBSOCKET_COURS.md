@@ -1098,4 +1098,213 @@ Serveur : "oui, voilà"               Pas d'attente du prochain poll
 
 ---
 
+## 14. Modifier et supprimer des messages
+
+### Le problème
+
+Une fois qu'un message est broadcasté à tous les membres d'une room, comment faire pour que tout le monde voie la modification ou la suppression ? Il faut de nouveaux événements WS et une règle d'autorisation côté serveur.
+
+### Nouveaux événements dans le protocole
+
+**Client → Serveur**
+
+| Type | Payload | Description |
+|---|---|---|
+| `message.edit` | `{ messageId, content }` | Demande de modification |
+| `message.delete` | `{ messageId }` | Demande de suppression |
+
+**Serveur → Client** (broadcast à toute la room)
+
+| Type | Payload | Description |
+|---|---|---|
+| `message.edited` | `{ messageId, content, editedAt }` | Notifie que le message a été modifié |
+| `message.deleted` | `{ messageId }` | Notifie que le message a été supprimé |
+
+### Règle d'autorisation — seul l'auteur peut modifier/supprimer
+
+Le serveur vérifie que le demandeur est bien l'auteur avant d'agir :
+
+```go
+// application/service/message_service.go
+func (s *MessageService) EditMessage(ctx context.Context, cmd dto.EditMessageCommand) (dto.MessageView, error) {
+    msg, err := s.messages.FindByID(ctx, cmd.MessageID)
+    if err != nil { return dto.MessageView{}, err }
+
+    if msg.AuthorID != cmd.RequestorID {
+        return dto.MessageView{}, domainerrors.ErrUnauthorized  // 403
+    }
+
+    now := time.Now().UTC()
+    msg.Content = cmd.Content
+    msg.EditedAt = &now
+    s.messages.Update(ctx, msg)
+
+    // Broadcast à TOUTE la room (y compris l'expéditeur)
+    s.hub.BroadcastToRoom(msg.RoomID, data)
+    return view, nil
+}
+```
+
+> **Pourquoi broadcast à tout le monde (y compris l'expéditeur) ?**
+> Contrairement à `message.send` où l'expéditeur confirme via `message.ack`, ici le message existe déjà. Tout le monde (y compris l'auteur sur un autre onglet) doit voir la mise à jour.
+
+### Côté client — mise à jour du store Zustand
+
+Quand `message.edited` arrive :
+
+```typescript
+// websocket.service.ts
+case 'message.edited':
+    chat.editMessage(roomId, messageId, content, editedAt);
+    break;
+
+// chat.store.ts
+editMessage: (roomId, messageId, content, editedAt) =>
+    set((s) => ({
+        messagesByRoom: {
+            ...s.messagesByRoom,
+            [roomId]: s.messagesByRoom[roomId].map((m) =>
+                m.id === messageId ? { ...m, content, editedAt } : m
+            ),
+        },
+    })),
+```
+
+Quand `message.deleted` arrive, le message est simplement retiré du tableau :
+
+```typescript
+deleteMessage: (roomId, messageId) =>
+    set((s) => ({
+        messagesByRoom: {
+            ...s.messagesByRoom,
+            [roomId]: s.messagesByRoom[roomId].filter((m) => m.id !== messageId),
+        },
+    })),
+```
+
+### UX — boutons d'action au survol
+
+Les boutons ✏️ et 🗑️ n'apparaissent qu'au survol (`onMouseEnter`/`onMouseLeave`) et **uniquement sur ses propres messages** (`authorId === myId`). Le mode édition est inline : `Entrée` pour sauvegarder, `Échap` pour annuler. Un label `(modifié)` s'affiche si `editedAt` est présent.
+
+```tsx
+// MessageBubble.tsx
+{isMine && hovered && !editing && (
+    <div style={{ position: 'absolute', top: -28 }}>
+        <button onClick={startEdit}>✏️</button>
+        <button onClick={() => onDelete(message.id)}>🗑️</button>
+    </div>
+)}
+```
+
+---
+
+## 15. Reconnexion automatique et persistance de session
+
+### Pourquoi le WebSocket peut se couper
+
+Une connexion WebSocket est persistante mais pas éternelle. Elle peut être interrompue par :
+- Un rechargement de page (`F5`)
+- Une coupure réseau temporaire (Wi-Fi, 4G)
+- Un timeout du proxy ou du load balancer (souvent 60s sans activité)
+- Un redémarrage du serveur
+
+Dans tous ces cas, la connexion est perdue et le client doit se reconnecter.
+
+### Le problème après reconnexion
+
+Quand le WebSocket se reconnecte, le serveur voit une **nouvelle connexion** — il ne sait pas qui c'est. L'état côté serveur (authentification, rooms jointes) est perdu. Il faut tout re-envoyer.
+
+Sans gestion, le cycle cassé ressemblait à :
+
+```
+Page reload
+  → token en localStorage (authStore persist)
+  → UI s'affiche (utilisateur semble connecté)
+  → MAIS wsService.connect() jamais appelé
+  → Aucun message ne peut arriver ni partir
+  → Chat vide jusqu'au prochain clic manuel
+```
+
+### La solution — trois mécanismes
+
+**1. Reconnexion automatique à la déconnexion**
+
+```typescript
+// websocket.service.ts
+this.ws.onclose = () => {
+    setTimeout(() => this.connect(this.currentUrl), 2000);
+};
+```
+
+2 secondes après une coupure, une nouvelle connexion est tentée.
+
+**2. Re-authentification automatique à chaque `onopen`**
+
+```typescript
+this.ws.onopen = () => {
+    // Lu depuis le store → fonctionne au reload ET à la reconnexion
+    const { token } = useAuthStore.getState();
+    if (token) {
+        this.ws.send(JSON.stringify({
+            type: 'auth.connect',
+            payload: { token }
+        }));
+    }
+    // Puis vider la file d'attente
+    const pending = this.queue.splice(0);
+    for (const event of pending) this.ws.send(JSON.stringify(event));
+};
+```
+
+> **Clé de conception** : le service WS lit le token **depuis le store** à chaque ouverture, pas depuis une variable locale. Ça permet de gérer le reload sans que le hook `useAuth` ait besoin de re-s'exécuter.
+
+**3. Re-join automatique de la room active après auth**
+
+```typescript
+// handleStoreUpdates
+case 'auth.connected':
+    const activeRoomId = useRoomStore.getState().activeRoomId;
+    if (activeRoomId) {
+        this.send({ type: 'room.join', roomId: activeRoomId, payload: {} });
+    }
+    break;
+```
+
+Dès que le serveur confirme l'authentification, le client re-rejoint immédiatement la room où il était. Le serveur répond avec `room.joined` + l'historique des 50 derniers messages.
+
+**4. Persistance de la room active**
+
+```typescript
+// room.store.ts — persist uniquement activeRoomId, pas la liste des rooms
+persist(
+    (set) => ({ ... }),
+    { name: 'chuchote-room', partialize: (s) => ({ activeRoomId: s.activeRoomId }) }
+)
+```
+
+`activeRoomId` survit au reload (localStorage) mais la liste des rooms est toujours rechargée via HTTP (données fraîches).
+
+### Séquence complète après un rechargement de page
+
+```
+1. Page reload
+2. authStore.token → lu depuis localStorage (persist)
+3. useAuth (useEffect) → wsService.connect('ws://...')
+4. TCP handshake + HTTP upgrade → WS ouverte
+5. onopen → auth.connect envoyé avec le token
+6. Serveur → auth.connected
+7. handleStoreUpdates → room.join envoyé (activeRoomId depuis localStorage)
+8. Serveur → room.joined { history: [...50 derniers messages] }
+9. setHistory() → messages affichés
+10. L'utilisateur retrouve son état comme si rien ne s'était passé
+```
+
+### Ce qu'il faut retenir
+
+- Un WebSocket est une **connexion avec état** côté serveur. À chaque reconnexion, cet état est perdu et doit être reconstruit.
+- La **file d'attente** (`queue`) dans le service WS permet de ne jamais perdre un message envoyé pendant que la connexion se rétablit.
+- Le store Zustand avec `persist` est la mémoire qui permet de reconstruire l'état sans que l'utilisateur ait à refaire les actions manuellement.
+
+---
+
 *Document généré à partir du code source du projet Chuchote — `Back/` (Go) et `client/src/` (React TypeScript)*
